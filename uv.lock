@@ -59,6 +59,7 @@ yaml = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "marshmallow-oneofschema" },
     { name = "openapi-spec-validator" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -78,6 +79,7 @@ lint = [
     { name = "pre-commit" },
 ]
 tests = [
+    { name = "marshmallow-oneofschema" },
     { name = "openapi-spec-validator" },
     { name = "pytest" },
 ]
@@ -92,6 +94,7 @@ provides-extras = ["yaml", "marshmallow"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "marshmallow-oneofschema" },
     { name = "openapi-spec-validator" },
     { name = "pre-commit", specifier = ">=3.5,<5.0" },
     { name = "pytest" },
@@ -107,6 +110,7 @@ docs = [
 ]
 lint = [{ name = "pre-commit", specifier = ">=3.5,<5.0" }]
 tests = [
+    { name = "marshmallow-oneofschema" },
     { name = "openapi-spec-validator" },
     { name = "pytest" },
 ]
@@ -680,6 +684,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/4e/d7/611e68d57e6a903c29cb33b5afec0f93b4baecacc6c6c62e33cde9eb9dcb/marshmallow-4.3.1.tar.gz", hash = "sha256:fb6b8048af08d4ab061610d5b7d3696a7e4c95337dbda880edb9f95812cabc20", size = 218308, upload-time = "2026-08-08T14:27:29.517Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/43/57/4526ca0e214a3d158690e3393f6d547a2f8070f88d6388ab21d5b0aac8a1/marshmallow-4.3.1-py3-none-any.whl", hash = "sha256:e65accfbe277546df92ed7996a678c90e063e9a7c2a2f5e03f7d0b90e3768c42", size = 49219, upload-time = "2026-08-08T14:27:28.078Z" },
+]
+
+[[package]]
+name = "marshmallow-oneofschema"
+version = "3.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "marshmallow" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bb/42/a0e00dea6a831acfe9d3fe664d695b7cefc02c27dd69d9ccb4bdc3c3d1a7/marshmallow_oneofschema-3.2.0.tar.gz", hash = "sha256:c06c8d9f14d51ffff152d66d85bd5f27d55cff10752a3b1f8c1f948bf5f597a0", size = 9096, upload-time = "2025-05-08T13:49:34.798Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/71/15/52d6ac14dcfe381e4f1c204c9c287623b8b462bc27c6cc468dba0560ed4c/marshmallow_oneofschema-3.2.0-py3-none-any.whl", hash = "sha256:19c87e6124ef05e2831e5c631168c909a50a8fe399921b9841b75fef3785be8c", size = 5898, upload-time = "2025-05-08T13:49:33.26Z" },
 ]
 
 [[package]]

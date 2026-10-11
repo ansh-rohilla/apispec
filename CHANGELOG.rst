@@ -4,6 +4,10 @@ Changelog
 unreleased
 **********
 
+Features:
+
+- ``MarshmallowPlugin``: Add support for polymorphic schemas using ``marshmallow-oneofschema.OneOfSchema`` (:issue:`1012`).
+
 Bug fixes:
 
 - Recognize ``trace`` operations defined in view docstrings, instead of

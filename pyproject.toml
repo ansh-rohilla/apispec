@@ -46,7 +46,7 @@ marshmallow = ["marshmallow>=3.18.0"]
 
 [dependency-groups]
 docs = ["marshmallow>=4.0.0", "pyyaml", "sphinx-issues", "furo", "sphinx>=8.1"]
-tests = ["openapi-spec-validator", "pytest"]
+tests = ["marshmallow-oneofschema", "openapi-spec-validator", "pytest"]
 lint = ["pre-commit>=3.5,<5.0"]
 dev = [
   { include-group = "tests" },

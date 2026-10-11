@@ -19,6 +19,13 @@ from packaging.version import Version
 from apispec import APISpec
 from apispec.exceptions import APISpecError
 
+try:
+    from marshmallow_oneofschema import OneOfSchema
+
+    ONEOFSCHEMA_AVAILABLE = True
+except ImportError:
+    ONEOFSCHEMA_AVAILABLE = False
+
 from .common import (
     get_fields,
     get_unique_schema_name,
@@ -248,6 +255,12 @@ class OpenAPIConverter(FieldConverterMixin):
         :param Schema schema: A marshmallow Schema instance
         :rtype: dict, a JSON Schema Object
         """
+        if ONEOFSCHEMA_AVAILABLE and (
+            isinstance(schema, OneOfSchema)
+            or (isinstance(schema, type) and issubclass(schema, OneOfSchema))
+        ):
+            return self._oneof_schema2jsonschema(schema)
+
         fields = get_fields(schema)
         Meta = getattr(schema, "Meta", None)
         partial = getattr(schema, "partial", None)
@@ -264,6 +277,60 @@ class OpenAPIConverter(FieldConverterMixin):
             jsonschema["additionalProperties"] = (
                 schema_instance.unknown == marshmallow.INCLUDE
             )
+
+        return jsonschema
+
+    def _oneof_schema2jsonschema(self, schema):
+        """Handle OneOfSchema instances by generating oneOf with discriminator.
+
+        :param OneOfSchema schema: A OneOfSchema instance or class
+        :rtype: dict, a JSON Schema Object with oneOf
+        """
+        if self.openapi_version.major < 3:
+            raise APISpecError(
+                f"OneOfSchema is only supported in OpenAPI 3.0.0 and above. "
+                f"Current OpenAPI version is {self.openapi_version}."
+            )
+
+        schema_instance = resolve_schema_instance(schema)
+        type_schemas = getattr(schema_instance, "type_schemas", {})
+        type_field = getattr(schema_instance, "type_field", "type")
+
+        if not type_schemas:
+            return {"type": "object", "properties": {}}
+
+        one_of_list = []
+        mapping = {}
+        for type_name, type_schema in type_schemas.items():
+            schema_ref = self.resolve_nested_schema(type_schema)
+            one_of_list.append(schema_ref)
+
+            if isinstance(schema_ref, dict):
+                if "$ref" in schema_ref:
+                    mapping[type_name] = schema_ref["$ref"]
+                elif (
+                    "items" in schema_ref
+                    and isinstance(schema_ref["items"], dict)
+                    and "$ref" in schema_ref["items"]
+                ):
+                    mapping[type_name] = schema_ref["items"]["$ref"]
+            elif isinstance(schema_ref, str):
+                mapping[type_name] = schema_ref
+
+        discriminator = {"propertyName": type_field}
+        if mapping:
+            discriminator["mapping"] = mapping
+
+        jsonschema = {
+            "oneOf": one_of_list,
+            "discriminator": discriminator,
+        }
+
+        Meta = getattr(schema, "Meta", getattr(schema_instance, "Meta", None))
+        if hasattr(Meta, "title"):
+            jsonschema["title"] = Meta.title
+        if hasattr(Meta, "description"):
+            jsonschema["description"] = Meta.description
 
         return jsonschema
 

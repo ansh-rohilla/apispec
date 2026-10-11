@@ -717,3 +717,111 @@ class TestFieldValidation:
         for attr, expected_value in properties.items():
             assert attr in result
             assert result[attr] == expected_value
+
+
+try:
+    from marshmallow_oneofschema import OneOfSchema
+
+    ONEOFSCHEMA_AVAILABLE = True
+except ImportError:
+    ONEOFSCHEMA_AVAILABLE = False
+
+
+if ONEOFSCHEMA_AVAILABLE:
+
+    class FooSchema(Schema):
+        foo = fields.Str()
+
+    class BarSchema(Schema):
+        bar = fields.Int()
+
+    class MyOneOf(OneOfSchema):
+        type_field = "type"
+        type_schemas = {
+            "foo": FooSchema,
+            "bar": BarSchema,
+        }
+
+    class CustomFieldOneOf(OneOfSchema):
+        type_field = "custom_type"
+        type_schemas = {
+            "foo": FooSchema,
+            "bar": BarSchema,
+        }
+
+    class TitledOneOf(OneOfSchema):
+        type_field = "type"
+        type_schemas = {
+            "foo": FooSchema,
+            "bar": BarSchema,
+        }
+
+        class Meta:
+            title = "PolymorphicOffer"
+            description = "A polymorphic offer"
+
+    class EmptyOneOf(OneOfSchema):
+        type_schemas: dict[str, type[Schema]] = {}
+
+
+@pytest.mark.skipif(
+    not ONEOFSCHEMA_AVAILABLE, reason="marshmallow-oneofschema not installed"
+)
+class TestOneOfSchemaToOpenAPI:
+    @pytest.mark.parametrize("openapi", ("3.0.0", "3.1.0"), indirect=True)
+    def test_oneof_schema_to_jsonschema(self, openapi):
+        res = openapi.schema2jsonschema(MyOneOf)
+        assert res == {
+            "oneOf": [
+                {"$ref": "#/components/schemas/Foo"},
+                {"$ref": "#/components/schemas/Bar"},
+            ],
+            "discriminator": {
+                "propertyName": "type",
+                "mapping": {
+                    "foo": "#/components/schemas/Foo",
+                    "bar": "#/components/schemas/Bar",
+                },
+            },
+        }
+
+    @pytest.mark.parametrize("openapi", ("3.0.0", "3.1.0"), indirect=True)
+    def test_oneof_schema_instance_to_jsonschema(self, openapi):
+        res = openapi.schema2jsonschema(MyOneOf())
+        assert res == {
+            "oneOf": [
+                {"$ref": "#/components/schemas/Foo"},
+                {"$ref": "#/components/schemas/Bar"},
+            ],
+            "discriminator": {
+                "propertyName": "type",
+                "mapping": {
+                    "foo": "#/components/schemas/Foo",
+                    "bar": "#/components/schemas/Bar",
+                },
+            },
+        }
+
+    @pytest.mark.parametrize("openapi", ("3.0.0", "3.1.0"), indirect=True)
+    def test_oneof_custom_type_field(self, openapi):
+        res = openapi.schema2jsonschema(CustomFieldOneOf)
+        assert res["discriminator"]["propertyName"] == "custom_type"
+
+    @pytest.mark.parametrize("openapi", ("3.0.0", "3.1.0"), indirect=True)
+    def test_oneof_meta_title_and_description(self, openapi):
+        res = openapi.schema2jsonschema(TitledOneOf)
+        assert res["title"] == "PolymorphicOffer"
+        assert res["description"] == "A polymorphic offer"
+
+    @pytest.mark.parametrize("openapi", ("3.0.0", "3.1.0"), indirect=True)
+    def test_oneof_empty_type_schemas(self, openapi):
+        res = openapi.schema2jsonschema(EmptyOneOf)
+        assert res == {"type": "object", "properties": {}}
+
+    @pytest.mark.parametrize("openapi", ("2.0",), indirect=True)
+    def test_oneof_openapi_v2_raises_error(self, openapi):
+        with pytest.raises(
+            exceptions.APISpecError,
+            match="OneOfSchema is only supported in OpenAPI 3.0.0 and above",
+        ):
+            openapi.schema2jsonschema(MyOneOf)

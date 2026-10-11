@@ -36,6 +36,7 @@ from .utils import (
     get_paths,
     get_responses,
     get_schemas,
+    validate_spec,
 )
 
 MA_VERSION = Version(importlib.metadata.version("marshmallow"))
@@ -1369,3 +1370,146 @@ class TestTimeDelta:
             get_schemas(spec)["SchemaWithTimeDelta"]["properties"]["day"]["x-unit"]
             == "days"
         )
+
+
+try:
+    from marshmallow_oneofschema import OneOfSchema
+
+    ONEOFSCHEMA_AVAILABLE = True
+except ImportError:
+    ONEOFSCHEMA_AVAILABLE = False
+
+
+if ONEOFSCHEMA_AVAILABLE:
+
+    class OneOfFooSchema(Schema):
+        foo = String()
+
+    class OneOfBarSchema(Schema):
+        bar = Int()
+
+    class ExampleOneOf(OneOfSchema):
+        type_field = "type"
+        type_schemas = {
+            "foo": OneOfFooSchema,
+            "bar": OneOfBarSchema,
+        }
+
+    class ExampleParentSchema(Schema):
+        item = Nested(ExampleOneOf)
+
+
+@pytest.mark.skipif(
+    not ONEOFSCHEMA_AVAILABLE, reason="marshmallow-oneofschema not installed"
+)
+class TestOneOfSchemaIntegration:
+    @pytest.mark.parametrize("openapi_version", ("3.0.2", "3.1.0"))
+    def test_spec_components_schema_with_oneof(self, openapi_version):
+        spec = APISpec(
+            title="OneOf Test",
+            version="1.0.0",
+            openapi_version=openapi_version,
+            plugins=[MarshmallowPlugin()],
+        )
+        spec.components.schema("ExampleOneOf", schema=ExampleOneOf)
+
+        schemas = get_schemas(spec)
+        assert "ExampleOneOf" in schemas
+        assert "OneOfFoo" in schemas
+        assert "OneOfBar" in schemas
+        assert schemas["ExampleOneOf"] == {
+            "oneOf": [
+                build_ref(spec, "schema", "OneOfFoo"),
+                build_ref(spec, "schema", "OneOfBar"),
+            ],
+            "discriminator": {
+                "propertyName": "type",
+                "mapping": {
+                    "foo": build_ref(spec, "schema", "OneOfFoo")["$ref"],
+                    "bar": build_ref(spec, "schema", "OneOfBar")["$ref"],
+                },
+            },
+        }
+        validate_spec(spec)
+
+    @pytest.mark.parametrize("openapi_version", ("3.0.2", "3.1.0"))
+    def test_spec_nested_oneof_schema(self, openapi_version):
+        spec = APISpec(
+            title="OneOf Nested Test",
+            version="1.0.0",
+            openapi_version=openapi_version,
+            plugins=[MarshmallowPlugin()],
+        )
+        spec.components.schema("Parent", schema=ExampleParentSchema)
+
+        schemas = get_schemas(spec)
+        assert "Parent" in schemas
+        assert "ExampleOneOf" in schemas
+        assert "OneOfFoo" in schemas
+        assert "OneOfBar" in schemas
+        assert schemas["Parent"]["properties"]["item"] == build_ref(
+            spec, "schema", "ExampleOneOf"
+        )
+        validate_spec(spec)
+
+    @pytest.mark.parametrize("openapi_version", ("3.0.2", "3.1.0"))
+    def test_spec_operations_with_oneof(self, openapi_version):
+        spec = APISpec(
+            title="OneOf Operations Test",
+            version="1.0.0",
+            openapi_version=openapi_version,
+            plugins=[MarshmallowPlugin()],
+        )
+        spec.path(
+            "/items",
+            operations={
+                "post": {
+                    "requestBody": {
+                        "content": {"application/json": {"schema": ExampleOneOf}}
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "success",
+                            "content": {"application/json": {"schema": ExampleOneOf}},
+                        }
+                    },
+                }
+            },
+        )
+        schemas = get_schemas(spec)
+        assert "ExampleOneOf" in schemas
+        assert "OneOfFoo" in schemas
+        assert "OneOfBar" in schemas
+        paths = get_paths(spec)
+        assert paths["/items"]["post"]["requestBody"]["content"]["application/json"][
+            "schema"
+        ] == build_ref(spec, "schema", "ExampleOneOf")
+        validate_spec(spec)
+
+    @pytest.mark.parametrize("openapi_version", ("3.0.2", "3.1.0"))
+    def test_spec_anonymous_oneof_inline(self, openapi_version):
+        spec = APISpec(
+            title="Anonymous OneOf",
+            version="1.0.0",
+            openapi_version=openapi_version,
+            plugins=[MarshmallowPlugin(schema_name_resolver=lambda s: None)],
+        )
+        spec.path(
+            "/items",
+            operations={
+                "post": {
+                    "requestBody": {
+                        "content": {"application/json": {"schema": ExampleOneOf}}
+                    },
+                    "responses": {"200": {"description": "success"}},
+                }
+            },
+        )
+        paths = get_paths(spec)
+        schema = paths["/items"]["post"]["requestBody"]["content"]["application/json"][
+            "schema"
+        ]
+        assert "oneOf" in schema
+        assert len(schema["oneOf"]) == 2
+        assert schema["discriminator"] == {"propertyName": "type"}
+        validate_spec(spec)
