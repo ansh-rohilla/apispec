@@ -404,6 +404,23 @@ class TestComponents(RefsSchemaTestMixin):
         spec.components.schema("refs_schema", copy.deepcopy(self.REFS_SCHEMA))
         self.assert_schema_refs(spec, get_schemas(spec)["refs_schema"])
 
+    @pytest.mark.parametrize("spec", ("3.1.0",), indirect=True)
+    def test_components_resolve_refs_in_schema_openapi_3_1_tuple(self, spec):
+        spec.components.schema(
+            "tuple_schema",
+            {
+                "type": "array",
+                "prefixItems": ["NestedSchema", {"type": "string"}],
+                "items": False,
+            },
+        )
+        schema = get_schemas(spec)["tuple_schema"]
+        assert schema["items"] is False
+        assert schema["prefixItems"] == [
+            build_ref(spec, "schema", "NestedSchema"),
+            {"type": "string"},
+        ]
+
     def test_components_resolve_response_schema(self, spec):
         schema = {"schema": "PetSchema"}
         if spec.openapi_version.major >= 3:

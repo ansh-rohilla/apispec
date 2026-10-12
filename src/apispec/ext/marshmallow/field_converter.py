@@ -19,6 +19,8 @@ import marshmallow
 from marshmallow.orderedset import OrderedSet
 from packaging.version import Version
 
+from apispec.exceptions import APISpecError
+
 # marshmallow field => (JSON Schema type, format)
 DEFAULT_FIELD_MAPPING: dict[type, tuple[str | None, str | None]] = {
     marshmallow.fields.Integer: ("integer", None),
@@ -38,6 +40,7 @@ DEFAULT_FIELD_MAPPING: dict[type, tuple[str | None, str | None]] = {
     marshmallow.fields.Field: (None, None),
     marshmallow.fields.Raw: (None, None),
     marshmallow.fields.List: ("array", None),
+    marshmallow.fields.Tuple: ("array", None),
     marshmallow.fields.IP: ("string", "ip"),
     marshmallow.fields.IPv4: ("string", "ipv4"),
     marshmallow.fields.IPv6: ("string", "ipv6"),
@@ -69,6 +72,7 @@ _VALID_PROPERTIES = {
     "enum",
     "type",
     "items",
+    "prefixItems",
     "allOf",
     "oneOf",
     "anyOf",
@@ -112,6 +116,7 @@ class FieldConverterMixin:
             self.nested2properties,
             self.pluck2properties,
             self.list2properties,
+            self.tuple2properties,
             self.dict2properties,
             self.timedelta2properties,
             self.datetime2properties,
@@ -365,7 +370,12 @@ class FieldConverterMixin:
         ]
 
         is_array = isinstance(
-            field, (marshmallow.fields.Nested, marshmallow.fields.List)
+            field,
+            (
+                marshmallow.fields.Nested,
+                marshmallow.fields.List,
+                marshmallow.fields.Tuple,
+            ),
         )
         min_attr = "minItems" if is_array else "minLength"
         max_attr = "maxItems" if is_array else "maxLength"
@@ -501,6 +511,27 @@ class FieldConverterMixin:
         ret = {}
         if isinstance(field, marshmallow.fields.List):
             ret["items"] = self.field2property(field.inner)
+        return ret
+
+    def tuple2properties(
+        self, field: marshmallow.fields.Field, **kwargs: typing.Any
+    ) -> dict:
+        """Return a dictionary of properties from :class:`Tuple <marshmallow.fields.Tuple>` fields.
+
+        Will provide `prefixItems` and `items: False` properties based on the field's `tuple_fields` attribute.
+
+        :param Field field: A marshmallow field.
+        :rtype: dict
+        """
+        ret: dict[str, typing.Any] = {}
+        if isinstance(field, marshmallow.fields.Tuple):
+            if (self.openapi_version.major, self.openapi_version.minor) < (3, 1):
+                raise APISpecError(
+                    f"Tuple field is only supported in OpenAPI 3.1.0 and above. "
+                    f"Current OpenAPI version is {self.openapi_version}."
+                )
+            ret["prefixItems"] = [self.field2property(f) for f in field.tuple_fields]
+            ret["items"] = False
         return ret
 
     def dict2properties(self, field, **kwargs: typing.Any) -> dict:

@@ -282,8 +282,17 @@ class SchemaResolver:
         :param string|Schema|dict schema: the schema to resolve.
         """
         if isinstance(schema, dict):
-            if schema.get("type") == "array" and "items" in schema:
+            if (
+                schema.get("type") == "array"
+                and "items" in schema
+                and not isinstance(schema["items"], bool)
+            ):
                 schema["items"] = self.resolve_schema_dict(schema["items"])
+            if "prefixItems" in schema:
+                schema["prefixItems"] = [
+                    self.resolve_schema_dict(s) if not isinstance(s, bool) else s
+                    for s in schema["prefixItems"]
+                ]
             if schema.get("type") == "object" and "properties" in schema:
                 schema["properties"] = {
                     k: self.resolve_schema_dict(v)

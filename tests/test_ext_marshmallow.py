@@ -7,11 +7,13 @@ from marshmallow.fields import (
     DateTime,
     Dict,
     Field,
+    Float,
     Int,
     List,
     Nested,
     String,
     TimeDelta,
+    Tuple,
 )
 from packaging.version import Version
 
@@ -36,6 +38,7 @@ from .utils import (
     get_paths,
     get_responses,
     get_schemas,
+    validate_spec,
 )
 
 MA_VERSION = Version(importlib.metadata.version("marshmallow"))
@@ -1369,3 +1372,94 @@ class TestTimeDelta:
             get_schemas(spec)["SchemaWithTimeDelta"]["properties"]["day"]["x-unit"]
             == "days"
         )
+
+
+class TestTuple:
+    @pytest.mark.parametrize("openapi_version", ("2.0", "3.0.0"))
+    def test_tuple_unsupported_openapi_versions(self, openapi_version):
+        class SchemaWithTuple(Schema):
+            point = Tuple([Float(), Float()])
+
+        spec = APISpec(
+            title="Tuple Test",
+            version="0.1",
+            openapi_version=openapi_version,
+            plugins=(MarshmallowPlugin(),),
+        )
+        with pytest.raises(
+            APISpecError,
+            match="Tuple field is only supported in OpenAPI 3.1.0 and above.",
+        ):
+            spec.components.schema("SchemaWithTuple", schema=SchemaWithTuple)
+
+    def test_tuple_in_schema_openapi_3_1(self):
+        class SchemaWithTuple(Schema):
+            point = Tuple([Float(), Float()])
+
+        spec = APISpec(
+            title="Tuple Test",
+            version="0.1",
+            openapi_version="3.1.0",
+            plugins=(MarshmallowPlugin(),),
+        )
+        spec.components.schema("SchemaWithTuple", schema=SchemaWithTuple)
+
+        result = get_schemas(spec)["SchemaWithTuple"]["properties"]["point"]
+        assert result == {
+            "type": "array",
+            "prefixItems": [{"type": "number"}, {"type": "number"}],
+            "items": False,
+        }
+        assert validate_spec(spec)
+
+    def test_tuple_with_nested_schema_openapi_3_1(self):
+        class SchemaWithNestedTuple(Schema):
+            pair = Tuple([Nested(PetSchema), String()])
+
+        spec = APISpec(
+            title="Nested Tuple Test",
+            version="0.1",
+            openapi_version="3.1.0",
+            plugins=(MarshmallowPlugin(),),
+        )
+        spec.components.schema("SchemaWithNestedTuple", schema=SchemaWithNestedTuple)
+
+        assert len(get_schemas(spec)) == 2
+        result = get_schemas(spec)["SchemaWithNestedTuple"]["properties"]["pair"]
+        assert result == {
+            "type": "array",
+            "prefixItems": [build_ref(spec, "schema", "Pet"), {"type": "string"}],
+            "items": False,
+        }
+        assert validate_spec(spec)
+
+    def test_tuple_in_operation_openapi_3_1(self):
+        class CoordSchema(Schema):
+            coords = Tuple([Int(), String()])
+
+        spec = APISpec(
+            title="Operation Tuple Test",
+            version="0.1",
+            openapi_version="3.1.0",
+            plugins=(MarshmallowPlugin(),),
+        )
+        spec.path(
+            "/coords",
+            operations={
+                "get": {
+                    "responses": {
+                        "200": {
+                            "description": "Coordinates response",
+                            "content": {"application/json": {"schema": CoordSchema}},
+                        }
+                    }
+                }
+            },
+        )
+        schema = get_schemas(spec)["Coord"]
+        assert schema["properties"]["coords"] == {
+            "type": "array",
+            "prefixItems": [{"type": "integer"}, {"type": "string"}],
+            "items": False,
+        }
+        assert validate_spec(spec)

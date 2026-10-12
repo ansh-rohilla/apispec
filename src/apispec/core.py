@@ -350,9 +350,18 @@ class Components:
                     "schema", schema["properties"][key]
                 )
                 self._resolve_refs_in_schema(schema["properties"][key])
-        if "items" in schema:
+        if "items" in schema and isinstance(schema["items"], (dict, str)):
             schema["items"] = self.get_ref("schema", schema["items"])
-            self._resolve_refs_in_schema(schema["items"])
+            if isinstance(schema["items"], dict):
+                self._resolve_refs_in_schema(schema["items"])
+        if "prefixItems" in schema:
+            schema["prefixItems"] = [
+                self.get_ref("schema", s) if isinstance(s, (dict, str)) else s
+                for s in schema["prefixItems"]
+            ]
+            for sch in schema["prefixItems"]:
+                if isinstance(sch, dict):
+                    self._resolve_refs_in_schema(sch)
         for key in ("allOf", "oneOf", "anyOf"):
             if key in schema:
                 schema[key] = [self.get_ref("schema", s) for s in schema[key]]

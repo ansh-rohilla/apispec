@@ -7,6 +7,8 @@ import pytest
 from marshmallow import Schema, fields, validate
 from packaging.version import Version
 
+from apispec.exceptions import APISpecError
+
 from .schemas import CategorySchema, CustomIntegerField, CustomList, CustomStringField
 from .utils import build_ref, get_schemas
 
@@ -779,3 +781,105 @@ def test_field2property_examples(spec_fixture):
     assert res == {
         "examples": ["foo", "bar"],
     }
+
+
+class TestField2PropertyTuple:
+    @pytest.mark.parametrize("spec_fixture", ("2.0", "3.0.0"), indirect=True)
+    def test_tuple_unsupported_openapi_versions(self, spec_fixture):
+        field = fields.Tuple([fields.Integer(), fields.String()])
+        with pytest.raises(
+            APISpecError,
+            match="Tuple field is only supported in OpenAPI 3.1.0 and above.",
+        ):
+            spec_fixture.openapi.field2property(field)
+
+    @pytest.mark.parametrize("spec_fixture", ("3.1.0",), indirect=True)
+    def test_tuple_simple(self, spec_fixture):
+        field = fields.Tuple([fields.Integer(), fields.String()])
+        res = spec_fixture.openapi.field2property(field)
+        assert res == {
+            "type": "array",
+            "prefixItems": [{"type": "integer"}, {"type": "string"}],
+            "items": False,
+        }
+
+    @pytest.mark.parametrize("spec_fixture", ("3.1.0",), indirect=True)
+    def test_tuple_empty(self, spec_fixture):
+        field = fields.Tuple([])
+        res = spec_fixture.openapi.field2property(field)
+        assert res == {
+            "type": "array",
+            "prefixItems": [],
+            "items": False,
+        }
+
+    @pytest.mark.parametrize("spec_fixture", ("3.1.0",), indirect=True)
+    def test_tuple_nullable(self, spec_fixture):
+        field = fields.Tuple([fields.Integer()], allow_none=True)
+        res = spec_fixture.openapi.field2property(field)
+        assert res == {
+            "type": ["array", "null"],
+            "prefixItems": [{"type": "integer"}],
+            "items": False,
+        }
+
+    @pytest.mark.parametrize("spec_fixture", ("3.1.0",), indirect=True)
+    def test_tuple_length_validator(self, spec_fixture):
+        field = fields.Tuple(
+            [fields.Integer(), fields.String()],
+            validate=validate.Length(equal=2),
+        )
+        res = spec_fixture.openapi.field2property(field)
+        assert res == {
+            "type": "array",
+            "prefixItems": [{"type": "integer"}, {"type": "string"}],
+            "items": False,
+            "minItems": 2,
+            "maxItems": 2,
+        }
+
+    @pytest.mark.parametrize("spec_fixture", ("3.1.0",), indirect=True)
+    def test_tuple_dump_only_and_load_only(self, spec_fixture):
+        dump_field = fields.Tuple([fields.Integer()], dump_only=True)
+        assert spec_fixture.openapi.field2property(dump_field) == {
+            "type": "array",
+            "prefixItems": [{"type": "integer"}],
+            "items": False,
+            "readOnly": True,
+        }
+
+        load_field = fields.Tuple([fields.Integer()], load_only=True)
+        assert spec_fixture.openapi.field2property(load_field) == {
+            "type": "array",
+            "prefixItems": [{"type": "integer"}],
+            "items": False,
+            "writeOnly": True,
+        }
+
+    @pytest.mark.parametrize("spec_fixture", ("3.1.0",), indirect=True)
+    def test_tuple_metadata(self, spec_fixture):
+        field = fields.Tuple(
+            [fields.Integer()],
+            metadata={"description": "Tuple of coordinates"},
+        )
+        assert spec_fixture.openapi.field2property(field) == {
+            "type": "array",
+            "prefixItems": [{"type": "integer"}],
+            "items": False,
+            "description": "Tuple of coordinates",
+        }
+
+    @pytest.mark.parametrize("spec_fixture", ("3.1.0",), indirect=True)
+    def test_tuple_nested(self, spec_fixture):
+        field = fields.Tuple([fields.Tuple([fields.Integer()])])
+        assert spec_fixture.openapi.field2property(field) == {
+            "type": "array",
+            "prefixItems": [
+                {
+                    "type": "array",
+                    "prefixItems": [{"type": "integer"}],
+                    "items": False,
+                }
+            ],
+            "items": False,
+        }
